@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+<?xml version="1.0" encoding="utf-8"?><!--
   ~ Copyright 2021 The Android Open Source Project
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,7 @@
   ~ limitations under the License.
   -->
 
-<manifest
-    xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-feature android:name="android.hardware.type.watch" />
 
@@ -28,6 +26,14 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- For showing an ongoing notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--connect Bluetooth devices -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <!-- makes the device discoverable to Bluetooth devices -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <!-- communicates with already-paired Bluetooth devices -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
 
     <!-- When an app targets Android 11 (API level 30) or higher and queries for information about
          the other apps that are installed on a device, the system filters this information by
@@ -67,7 +73,7 @@
         <!-- Add foreground service location permission for exercise tracking -->
         <service
             android:name=".ExerciseService"
-            android:foregroundServiceType="location"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 </manifest>

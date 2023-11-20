@@ -16,7 +16,12 @@
 
 package com.example.exercise
 
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothServerSocket
+import android.bluetooth.BluetoothSocket
+import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -25,6 +30,8 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.wear.ambient.AmbientModeSupport
 import androidx.wear.ambient.AmbientModeSupport.AmbientCallbackProvider
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.IOException
+import java.util.UUID
 
 /**
  * This Activity serves a handful of functions:
@@ -38,6 +45,9 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(R.layout.activity_main), AmbientCallbackProvider {
 
+    private val NAME = "MyBTService"
+    private val BTMODULEUUID =
+        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     private val viewModel: MainViewModel by viewModels()
 
     override fun onSupportNavigateUp(): Boolean {
@@ -71,6 +81,41 @@ class MainActivity : AppCompatActivity(R.layout.activity_main), AmbientCallbackP
 
         override fun onUpdateAmbient() {
             viewModel.sendAmbientEvent(AmbientEvent.Update)
+        }
+    }
+    private inner class AcceptThread : Thread() {
+
+        private val mmServerSocket: BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE) {
+            val bluetoothAdapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+            bluetoothAdapter?.listenUsingInsecureRfcommWithServiceRecord(NAME, BTMODULEUUID)
+        }
+
+        override fun run() {
+            // Keep listening until exception occurs or a socket is returned.
+            var shouldLoop = true
+            while (shouldLoop) {
+                val socket: BluetoothSocket? = try {
+                    mmServerSocket?.accept()
+                } catch (e: IOException) {
+                    Log.e(TAG, "Socket's accept() method failed", e)
+                    shouldLoop = false
+                    null
+                }
+                socket?.also {
+//                    manageMyConnectedSocket(it)
+                    mmServerSocket?.close()
+                    shouldLoop = false
+                }
+            }
+        }
+
+        // Closes the connect socket and causes the thread to finish.
+        fun cancel() {
+            try {
+                mmServerSocket?.close()
+            } catch (e: IOException) {
+                Log.e(TAG, "Could not close the connect socket", e)
+            }
         }
     }
 }

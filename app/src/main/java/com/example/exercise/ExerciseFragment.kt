@@ -19,6 +19,10 @@ package com.example.exercise
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothServerSocket
+import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -30,6 +34,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.health.services.client.data.DataPointContainer
@@ -46,6 +51,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.util.Timer
@@ -224,6 +230,7 @@ class ExerciseFragment : Fragment() {
         }
     }
 
+    //六分鐘訓練,second為運行中的秒數
     private fun sixMinTrain(second: Int = 20) {
         val duration = activeDurationCheckpoint.displayDuration(
             Instant.now(),
@@ -244,7 +251,7 @@ class ExerciseFragment : Fragment() {
 //            serviceConnection.run { exerciseService?.endExercise() }
 //            updateExerciseStatus(cachedExerciseState)
 //            Log.d(TAG, "state = $cachedExerciseState")
-//                alertSound()
+                alertSound()
                 break
             }
         }
@@ -274,14 +281,14 @@ class ExerciseFragment : Fragment() {
     private fun alertSound() {
         val mediaPlayer = MediaPlayer.create(context, R.raw.sound_file_1)
         val repeatCount = 2
-        var playCount = 0
+        var playCount = 1
 
         // 音樂播放完成時的處理
         mediaPlayer.setOnCompletionListener { mp ->
             if (playCount < repeatCount) {
+                Log.d(TAG,"第${playCount}次撥放")
                 playCount++
                 mp.start()  // 重複播放
-                Log.d(TAG,"第${playCount}次撥放")
             } else {
                 // 停止播放並釋放資源
                 if (mp.isPlaying) {
@@ -440,6 +447,8 @@ class ExerciseFragment : Fragment() {
         activeDurationCheckpoint = service.activeDurationCheckpoint.value
         updateChronometer()
     }
+
+
 
     inner class AmbientModeHandler {
         internal fun onAmbientEvent(event: AmbientEvent) {
