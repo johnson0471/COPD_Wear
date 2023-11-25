@@ -29,6 +29,7 @@
 
     <!--connect Bluetooth devices -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <!-- makes the device discoverable to Bluetooth devices -->
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <!-- communicates with already-paired Bluetooth devices -->

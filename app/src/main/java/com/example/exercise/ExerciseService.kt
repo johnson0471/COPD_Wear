@@ -24,6 +24,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Binder
+import android.os.CountDownTimer
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
@@ -131,6 +132,7 @@ class ExerciseService : LifecycleService() {
             healthServicesManager.endExercise()
         }
         removeOngoingActivityNotification()
+
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -332,6 +334,8 @@ class ExerciseService : LifecycleService() {
 
         return notificationBuilder.build()
     }
+
+
 
     /** Local clients will use this to access the service. */
     inner class LocalBinder : Binder() {

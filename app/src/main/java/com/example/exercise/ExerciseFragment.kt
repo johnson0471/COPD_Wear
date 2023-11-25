@@ -16,25 +16,20 @@
 
 package com.example.exercise
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothServerSocket
-import android.bluetooth.BluetoothSocket
+
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.media.MediaPlayer
-import android.os.Build
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.os.Handler
+import android.os.PowerManager
+import android.os.PowerManager.WakeLock
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.health.services.client.data.DataPointContainer
@@ -48,14 +43,13 @@ import androidx.navigation.fragment.findNavController
 import androidx.wear.ambient.AmbientModeSupport
 import com.example.exercise.databinding.FragmentExerciseBinding
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.IOException
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
-import java.util.Timer
-import java.util.TimerTask
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -139,7 +133,6 @@ class ExerciseFragment : Fragment() {
         // Bind to our service. Views will only update once we are connected to it.
         ExerciseService.bindService(requireContext().applicationContext, serviceConnection)
         bindViewsToService()
-
     }
 
     override fun onDestroyView() {
@@ -181,6 +174,7 @@ class ExerciseFragment : Fragment() {
         }
         if (cachedExerciseState.isPaused) {
             service.resumeExercise()
+
         } else {
             service.pauseExercise()
         }
@@ -217,21 +211,30 @@ class ExerciseFragment : Fragment() {
                         // intervals. Instead we store the duration and update the chronometer with
                         // our own regularly-timed intervals.
                         activeDurationCheckpoint = it
-                        Log.d(TAG, it.activeDuration.toString().replace("PT", "").replace("S", ""))
-//                        val activeSecond = it.activeDuration.toString().replace("PT","").replace("S","").toInt()
-//                        if (activeSecond == 60){
-//
-//                        }
-//                        val duration = it.displayDuration(Instant.now(), cachedExerciseState)
-//                        Log.d(TAG,duration.seconds.toString())
                     }
                 }
             }
         }
     }
 
+    private fun sixMinTrain2() {
+        val countDownTimer = object : CountDownTimer(20000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secondsRemaining = millisUntilFinished / 1000
+                Log.d(TAG, secondsRemaining.toString())
+                updateChronometer()
+            }
+
+            override fun onFinish() {
+                Log.d(TAG, "A")
+            }
+        }
+        countDownTimer.start()
+    }
+
+
     //六分鐘訓練,second為運行中的秒數
-    private fun sixMinTrain(second: Int = 20) {
+    private suspend fun sixMinTrain(second: Int = 20) {
         val duration = activeDurationCheckpoint.displayDuration(
             Instant.now(),
             cachedExerciseState
@@ -241,64 +244,79 @@ class ExerciseFragment : Fragment() {
         if (cachedExerciseState == ExerciseState.ACTIVE) {
             val totalSecond = duration.seconds.toInt()
             Log.d(TAG, "sec = ${duration.seconds}")
-            while (totalSecond == second || totalSecond > second) {
+            while (totalSecond == second) {
                 stopChronometer()
                 Log.d(TAG, "update")
                 // 呼叫exerciseService停止運動
                 val service = checkNotNull(serviceConnection.exerciseService)
                 service.endExercise()
-//                showNotification()
-//            serviceConnection.run { exerciseService?.endExercise() }
-//            updateExerciseStatus(cachedExerciseState)
-//            Log.d(TAG, "state = $cachedExerciseState")
-                alertSound()
+                //更新錶面的時間
+                updateChronometer()
+                //撥放警示音
+                playSoundAsync()
                 break
             }
         }
-        val handler = Handler()
-        handler.postDelayed({
-            updateChronometer()
-        }, 1000)
     }
 
+
+    //當運動結束時，播放2次警示音後結束
 //    private fun alertSound() {
 //        val mediaPlayer = MediaPlayer.create(context, R.raw.sound_file_1)
-//        mediaPlayer.start()
-//        val timer = Timer()
-//        timer.schedule(object : TimerTask() {
-//            override fun run() {
-//                if (mediaPlayer.isPlaying) {
-//                    mediaPlayer.stop()
-//                    mediaPlayer.release()
-//                    Log.d(TAG, "Music is stop")
-//                    timer.cancel()
+//        val repeatCount = 2
+//        var playCount = 1
+//
+//        // 音樂播放完成時的處理
+//        mediaPlayer.setOnCompletionListener { mp ->
+//            if (playCount < repeatCount) {
+//                playCount++
+//                mp.start()  // 重複播放
+//            } else {
+//                // 停止播放並釋放資源
+//                if (mp.isPlaying) {
+//                    try {
+//                        mp.pause()
+//                        mp.stop()
+//                        mp.release()
+//                        Log.d(TAG, "Music is stop")
+//                    } catch (e: Exception) {
+//                        e.printStackTrace()
+//                        Log.d(TAG, e.toString())
+//                    }
 //                }
 //            }
-//        }, 2000)
+//        }
+//        mediaPlayer.start()
 //    }
 
     //當運動結束時，播放2次警示音後結束
-    private fun alertSound() {
-        val mediaPlayer = MediaPlayer.create(context, R.raw.sound_file_1)
-        val repeatCount = 2
-        var playCount = 1
-
-        // 音樂播放完成時的處理
-        mediaPlayer.setOnCompletionListener { mp ->
-            if (playCount < repeatCount) {
-                Log.d(TAG,"第${playCount}次撥放")
-                playCount++
-                mp.start()  // 重複播放
-            } else {
-                // 停止播放並釋放資源
-                if (mp.isPlaying) {
-                    mp.stop()
-                    mp.reset()
+    private suspend fun playSoundAsync() = withContext(Dispatchers.IO) {
+        try {
+            repeat(2) {
+                val mediaPlayer = MediaPlayer.create(context, R.raw.sound_file_1)
+                mediaPlayer?.start()
+                // 等待撥放完成
+                while (mediaPlayer?.isPlaying == true) {
+                    delay(100)
                 }
-                Log.d(TAG, "Music is stop")
+                // 釋放資源
+                mediaPlayer?.release()
+                // 等待一點時間，避免立即啟動下一個 MediaPlayer
+                delay(200)
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        mediaPlayer.start()
+    }
+
+    private fun acquireWakeLock() {
+        val powerManager = context?.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wakeLock: WakeLock? = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK, "COPD:WakeLockTag"
+        )
+        wakeLock?.acquire(10 * 1000L)
+
+        wakeLock?.release()
     }
 
     private fun unbindViewsFromService() {
@@ -316,8 +334,10 @@ class ExerciseFragment : Fragment() {
         //&& !ambientController.isAmbient
         if (state == ExerciseState.ACTIVE) {
             startChronometer()
+            Log.d(TAG, "startChronometer")
         } else {
             stopChronometer()
+            Log.d(TAG, "stopChronometer")
         }
 
         updateButtons(state)
@@ -353,30 +373,34 @@ class ExerciseFragment : Fragment() {
         }
     }
 
-    private fun showNotification() {
-        val notificationManager =
-            context?.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        val channel =
-            NotificationChannel("channel_id", "Channel Name", NotificationManager.IMPORTANCE_HIGH)
-        notificationManager.createNotificationChannel(channel)
-
-
-        val builder = Notification.Builder(context, "channel_id")
-            .setContentTitle("Your Title")
-            .setContentText("Your Content")
-            .setSmallIcon(R.drawable.ic_run)
-
-        val wearableExtender = Notification.WearableExtender()
-        // 在 WearableExtender 中設定 Wear OS 相關的選項
-        builder.extend(wearableExtender)
-
-        notificationManager.notify(1, builder.build())
-    }
 
 //    private fun updateLaps(laps: Int) {
 //        binding.lapsText.text = laps.toString()
 //    }
+
+    private fun startChronometer2() {
+        if (chronoTickJob == null) {
+            chronoTickJob = viewLifecycleOwner.lifecycleScope.launch {
+                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (true) {
+                        val countDownTimer = object : CountDownTimer(20000, 1000) {
+                            override fun onTick(millisUntilFinished: Long) {
+                                val secondsRemaining = millisUntilFinished / 1000
+                                Log.d(TAG, secondsRemaining.toString())
+                                updateChronometer()
+                            }
+
+                            override fun onFinish() {
+                                Log.d(TAG, "A")
+                                stopChronometer()
+                            }
+                        }
+                        countDownTimer.start()
+                    }
+                }
+            }
+        }
+    }
 
     private fun startChronometer() {
         if (chronoTickJob == null) {
@@ -385,6 +409,11 @@ class ExerciseFragment : Fragment() {
                     while (true) {
                         delay(CHRONO_TICK_MS)
                         updateChronometer()
+                        val duration = activeDurationCheckpoint.displayDuration(
+                            Instant.now(),
+                            cachedExerciseState
+                        )
+                        Log.d(TAG, duration.seconds.toString())
                     }
                 }
             }
@@ -435,23 +464,25 @@ class ExerciseFragment : Fragment() {
         }
     }
 
-    private fun performOneTimeUiUpdate() {
+    private suspend fun performOneTimeUiUpdate() {
         val service = checkNotNull(serviceConnection.exerciseService) {
             "Failed to achieve ExerciseService instance"
         }
         updateExerciseStatus(service.exerciseState.value)
 //        updateLaps(service.exerciseLaps.value)
 
-        service.latestMetrics.value?.let { updateMetrics(it) }
+        service.latestMetrics.value?.let {
+            updateMetrics(it)
+            sixMinTrain()
+        }
 
         activeDurationCheckpoint = service.activeDurationCheckpoint.value
         updateChronometer()
     }
 
 
-
     inner class AmbientModeHandler {
-        internal fun onAmbientEvent(event: AmbientEvent) {
+        internal suspend fun onAmbientEvent(event: AmbientEvent) {
             when (event) {
                 is AmbientEvent.Enter -> onEnterAmbient()
                 is AmbientEvent.Exit -> onExitAmbient()
@@ -460,21 +491,26 @@ class ExerciseFragment : Fragment() {
             }
         }
 
-        private fun onEnterAmbient() {
+        private suspend fun onEnterAmbient() {
             // Note: Apps should also handle low-bit ambient and burn-in protection.
+//            為了能讓應用程式暫停，所以將下行註解
             unbindViewsFromService()
             setAmbientUiState(true)
             performOneTimeUiUpdate()
+            Log.d(TAG, "onEnterAmbient")
         }
 
-        private fun onExitAmbient() {
+
+        private suspend fun onExitAmbient() {
             performOneTimeUiUpdate()
             setAmbientUiState(false)
             bindViewsToService()
+            Log.d(TAG, "onExitAmbient")
         }
 
-        private fun onUpdateAmbient() {
+        private suspend fun onUpdateAmbient() {
             performOneTimeUiUpdate()
+            Log.d(TAG, "onUpdateAmbient")
         }
     }
 

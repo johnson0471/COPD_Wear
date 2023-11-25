@@ -21,6 +21,7 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.viewModels
@@ -45,6 +46,8 @@ import java.util.UUID
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(R.layout.activity_main), AmbientCallbackProvider {
 
+    private var acceptThread: AcceptThread? = null
+
     private val NAME = "MyBTService"
     private val BTMODULEUUID =
         UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
@@ -53,6 +56,11 @@ class MainActivity : AppCompatActivity(R.layout.activity_main), AmbientCallbackP
     override fun onSupportNavigateUp(): Boolean {
         val navController = findNavController(R.id.nav_host_fragment)
         return navController.navigateUp()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?, persistentState: PersistableBundle?) {
+        super.onCreate(savedInstanceState, persistentState)
+//        startBluetoothServer()
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
@@ -83,39 +91,54 @@ class MainActivity : AppCompatActivity(R.layout.activity_main), AmbientCallbackP
             viewModel.sendAmbientEvent(AmbientEvent.Update)
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+//        acceptThread?.cancel()
+    }
+
+    private fun startBluetoothServer() {
+        if (acceptThread == null) {
+            acceptThread = AcceptThread()
+            acceptThread?.start()
+        }
+    }
+
+    //定義一個繼承自 Thread 的內部類別 AcceptThread，用於在後台執行緒中等待藍芽連線
     private inner class AcceptThread : Thread() {
 
-        private val mmServerSocket: BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE) {
-            val bluetoothAdapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-            bluetoothAdapter?.listenUsingInsecureRfcommWithServiceRecord(NAME, BTMODULEUUID)
-        }
+//        private val mmServerSocket: BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE) {
+//            val bluetoothAdapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+//            bluetoothAdapter?.listenUsingInsecureRfcommWithServiceRecord(NAME, BTMODULEUUID)
+//        }
 
-        override fun run() {
-            // Keep listening until exception occurs or a socket is returned.
-            var shouldLoop = true
-            while (shouldLoop) {
-                val socket: BluetoothSocket? = try {
-                    mmServerSocket?.accept()
-                } catch (e: IOException) {
-                    Log.e(TAG, "Socket's accept() method failed", e)
-                    shouldLoop = false
-                    null
-                }
-                socket?.also {
-//                    manageMyConnectedSocket(it)
-                    mmServerSocket?.close()
-                    shouldLoop = false
-                }
-            }
-        }
-
-        // Closes the connect socket and causes the thread to finish.
-        fun cancel() {
-            try {
-                mmServerSocket?.close()
-            } catch (e: IOException) {
-                Log.e(TAG, "Could not close the connect socket", e)
-            }
-        }
+//        override fun run() {
+//            // Keep listening until exception occurs or a socket is returned.
+//            var shouldLoop = true
+//            while (shouldLoop) {
+//                val socket: BluetoothSocket? = try {
+//                    mmServerSocket?.accept()
+//                } catch (e: IOException) {
+//                    Log.e(TAG, "Socket's accept() method failed", e)
+//                    shouldLoop = false
+//                    null
+//                }
+//                socket?.also {
+////                    manageMyConnectedSocket(it)
+//                    mmServerSocket?.close()
+//                    shouldLoop = false
+//                }
+//            }
+//        }
+//
+//        // Closes the connect socket and causes the thread to finish.
+//        fun cancel() {
+//            try {
+//                mmServerSocket?.close()
+//            } catch (e: IOException) {
+//                Log.e(TAG, "Could not close the connect socket", e)
+//            }
+//        }
     }
 }

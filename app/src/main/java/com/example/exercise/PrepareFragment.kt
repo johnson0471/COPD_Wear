@@ -64,6 +64,7 @@ class PrepareFragment : Fragment(R.layout.fragment_prepare) {
             checkNotNull(serviceConnection.exerciseService) {
                 "Failed to achieve ExerciseService instance"
             }.startExercise()
+
             findNavController().navigate(R.id.exerciseFragment)
         }
         // Check permissions first.
