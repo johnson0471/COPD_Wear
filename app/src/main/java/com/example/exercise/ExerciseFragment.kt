@@ -24,6 +24,7 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.PowerManager.WakeLock
 import android.util.Log
@@ -50,7 +51,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
+import java.util.Timer
+import java.util.TimerTask
 import javax.inject.Inject
+import kotlin.concurrent.timer
 import kotlin.math.roundToInt
 
 /**
@@ -73,6 +77,14 @@ class ExerciseFragment : Fragment() {
         ExerciseUpdate.ActiveDurationCheckpoint(Instant.now(), Duration.ZERO)
     private var chronoTickJob: Job? = null
     private var uiBindingJob: Job? = null
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    private lateinit var countDownTimer: CountDownTimer
+
+    //    private var isPaused = false
+    private var remainingTime: Long = 21000
+    private var pausedTime: Long = 0
 
     private lateinit var ambientController: AmbientModeSupport.AmbientController
     private lateinit var ambientModeHandler: AmbientModeHandler
@@ -133,6 +145,12 @@ class ExerciseFragment : Fragment() {
         // Bind to our service. Views will only update once we are connected to it.
         ExerciseService.bindService(requireContext().applicationContext, serviceConnection)
         bindViewsToService()
+
+//        // 初始化 CountDownTimer
+//        countDownTimer = createCountDownTimer(remainingTime)
+//
+//        // 開始計時
+//        countDownTimer.start()
     }
 
     override fun onDestroyView() {
@@ -147,11 +165,15 @@ class ExerciseFragment : Fragment() {
         if (cachedExerciseState.isEnded) {
             Log.d(TAG, "startExercise")
             tryStartExercise()
+//            sixMinTrain()
+//            countDownTimer = createCountDownTimer(remainingTime)
+//            countDownTimer.start()
         } else {
             Log.d(TAG, "endExercise")
             checkNotNull(serviceConnection.exerciseService) {
                 "Failed to achieve ExerciseService instance"
             }.endExercise()
+//            countDownTimer.cancel()
         }
     }
 
@@ -174,9 +196,14 @@ class ExerciseFragment : Fragment() {
         }
         if (cachedExerciseState.isPaused) {
             service.resumeExercise()
-
+            //new
+//            countDownTimer = createCountDownTimer(pausedTime)
+//            countDownTimer.start()
         } else {
             service.pauseExercise()
+            //new
+//            pausedTime = remainingTime
+//            countDownTimer.cancel()
         }
     }
 
@@ -198,8 +225,8 @@ class ExerciseFragment : Fragment() {
                         }
                         sixMinTrain()
                     }
-
                 }
+
 //                launch {
 //                    service.exerciseLaps.collect {
 //                        updateLaps(it)S
@@ -213,28 +240,69 @@ class ExerciseFragment : Fragment() {
                         activeDurationCheckpoint = it
                     }
                 }
+//                launch { sixMinTrain() }
             }
         }
     }
 
-    private fun sixMinTrain2() {
-        val countDownTimer = object : CountDownTimer(20000, 1000) {
+    private fun createCountDownTimer(time: Long): CountDownTimer {
+        return object : CountDownTimer(time, 1000) {
             override fun onTick(millisUntilFinished: Long) {
-                val secondsRemaining = millisUntilFinished / 1000
-                Log.d(TAG, secondsRemaining.toString())
-                updateChronometer()
+                remainingTime = millisUntilFinished
+                updateUI((millisUntilFinished / 1000).toInt())
             }
 
             override fun onFinish() {
-                Log.d(TAG, "A")
+                updateUI(0)
+                countDownTimer.cancel()
+                handler.post {
+                    updateChronometer()
+                }
+                // 呼叫exerciseService停止運動
+                val service = checkNotNull(serviceConnection.exerciseService)
+                service.endExercise()
+                wakeUpScreen()
+                remainingTime = 21000
             }
         }
-        countDownTimer.start()
+    }
+
+    private fun updateUI(seconds: Int) {
+        Log.d(TAG, "Time: $seconds seconds")
+    }
+
+
+    private fun sixMinTrain2() {
+        val timer = Timer()
+        val timerTask = object : TimerTask() {
+            var second = 0
+            override fun run() {
+                if (second < 20) {
+                    Log.d(TAG, "時間${second}秒")
+                    second++
+                } else {
+                    Log.d(TAG, "計時結束")
+                    stopChronometer()
+                    handler.post {
+                        updateChronometer()
+                    }
+                    timer.cancel()
+                    // 呼叫exerciseService停止運動
+                    val service = checkNotNull(serviceConnection.exerciseService)
+                    service.endExercise()
+//                    //更新錶面的時間
+//                    updateChronometer()
+//                    //撥放警示音
+//                    playSoundAsync()
+                }
+            }
+        }
+        timer.scheduleAtFixedRate(timerTask, 1000, 1000)
     }
 
 
     //六分鐘訓練,second為運行中的秒數
-    private suspend fun sixMinTrain(second: Int = 20) {
+    private suspend fun sixMinTrain(second: Int = 30) {
         val duration = activeDurationCheckpoint.displayDuration(
             Instant.now(),
             cachedExerciseState
@@ -244,17 +312,17 @@ class ExerciseFragment : Fragment() {
         if (cachedExerciseState == ExerciseState.ACTIVE) {
             val totalSecond = duration.seconds.toInt()
             Log.d(TAG, "sec = ${duration.seconds}")
-            while (totalSecond == second) {
-                stopChronometer()
+            if (totalSecond > second) {
+//                stopChronometer()
                 Log.d(TAG, "update")
                 // 呼叫exerciseService停止運動
                 val service = checkNotNull(serviceConnection.exerciseService)
                 service.endExercise()
+                wakeUpScreen()
                 //更新錶面的時間
                 updateChronometer()
                 //撥放警示音
                 playSoundAsync()
-                break
             }
         }
     }
@@ -309,14 +377,16 @@ class ExerciseFragment : Fragment() {
         }
     }
 
-    private fun acquireWakeLock() {
+    private fun wakeUpScreen() {
         val powerManager = context?.getSystemService(Context.POWER_SERVICE) as PowerManager
         val wakeLock: WakeLock? = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "COPD:WakeLockTag"
         )
-        wakeLock?.acquire(10 * 1000L)
-
+        Log.d(TAG, "wakeUpScreen")
+        wakeLock?.acquire(10 * 1000L /*10 minutes*/)
+        Log.d(TAG, "wakeUpScreen1")
         wakeLock?.release()
+        Log.d(TAG, "wakeUpScreen2")
     }
 
     private fun unbindViewsFromService() {
@@ -332,7 +402,7 @@ class ExerciseFragment : Fragment() {
         }
         //如果現在狀態為運動且不在環境模式狀態中
         //&& !ambientController.isAmbient
-        if (state == ExerciseState.ACTIVE) {
+        if (state == ExerciseState.ACTIVE && !ambientController.isAmbient) {
             startChronometer()
             Log.d(TAG, "startChronometer")
         } else {
@@ -464,7 +534,7 @@ class ExerciseFragment : Fragment() {
         }
     }
 
-    private suspend fun performOneTimeUiUpdate() {
+    private fun performOneTimeUiUpdate() {
         val service = checkNotNull(serviceConnection.exerciseService) {
             "Failed to achieve ExerciseService instance"
         }
@@ -473,16 +543,16 @@ class ExerciseFragment : Fragment() {
 
         service.latestMetrics.value?.let {
             updateMetrics(it)
-            sixMinTrain()
         }
-
         activeDurationCheckpoint = service.activeDurationCheckpoint.value
+//        sixMinTrain()
         updateChronometer()
+        Log.d(TAG, "performOneTimeUiUpdate")
     }
 
 
     inner class AmbientModeHandler {
-        internal suspend fun onAmbientEvent(event: AmbientEvent) {
+        internal  fun onAmbientEvent(event: AmbientEvent) {
             when (event) {
                 is AmbientEvent.Enter -> onEnterAmbient()
                 is AmbientEvent.Exit -> onExitAmbient()
@@ -491,9 +561,8 @@ class ExerciseFragment : Fragment() {
             }
         }
 
-        private suspend fun onEnterAmbient() {
+        private fun onEnterAmbient() {
             // Note: Apps should also handle low-bit ambient and burn-in protection.
-//            為了能讓應用程式暫停，所以將下行註解
             unbindViewsFromService()
             setAmbientUiState(true)
             performOneTimeUiUpdate()
@@ -501,14 +570,14 @@ class ExerciseFragment : Fragment() {
         }
 
 
-        private suspend fun onExitAmbient() {
+        private fun onExitAmbient() {
             performOneTimeUiUpdate()
             setAmbientUiState(false)
             bindViewsToService()
             Log.d(TAG, "onExitAmbient")
         }
 
-        private suspend fun onUpdateAmbient() {
+        private fun onUpdateAmbient() {
             performOneTimeUiUpdate()
             Log.d(TAG, "onUpdateAmbient")
         }

@@ -71,7 +71,7 @@ class HealthServicesManager @Inject constructor(
      */
     suspend fun startExercise() {
         Log.d(TAG, "Starting exercise")
-        // 接收運動指標，包括心率，總部數及總距離
+        // 接收運動指標，包括心率，總步數及總距離
         val capabilities = getExerciseCapabilities() ?: return
         val dataTypes = setOf(
             DataType.HEART_RATE_BPM,
